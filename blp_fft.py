@@ -10,7 +10,7 @@ def edge_slice(ax, dim, index):
     return tuple([slice(None) if i != ax else index for i in range(dim)])
 
 class Lattice:
-    # Abstract class to standardize some basic lattice methods.
+    """Abstract class to standardize some basic lattice methods."""
     def __init__(self, n):
         self.n = n
         self.init_coords()
@@ -18,18 +18,18 @@ class Lattice:
         self.init_ordering()
 
     def init_grids(self):
-        # Produces a set of grids representing the collocation points.
-        # Each grid is Cartesian but a lattice can be made of multiple grids
+        """ Produces a set of grids representing the collocation points.
+         Each grid is Cartesian but a lattice can be made of multiple grids."""
         self.coords = [np.meshgrid(*x, indexing='ij') for x in self.x]
         self.grids = [np.zeros(L[0].shape) for L in self.coords]
         self.coefs = [np.zeros(L.shape) for L in self.grids]
 
     def get_point_count(self):
-        # Return the number of distinct lattice points in real space
+        """Returns the number of distinct lattice points in real space."""
         return sum([L.size for L in self.grids])
 
     def get_points(self):
-        # Produce a list of every collocation point of shape (p_num, dim)
+        """Produces a list of every collocation point of shape (p_num, dim)"""
         p_list = []
         for x_grid in self.coords:
             p_list.extend([[x_grid[i][ind] for i in range(self.dim)] 
@@ -37,13 +37,13 @@ class Lattice:
         return np.array(p_list)
 
     def eval_func(self, f):
-        # Evaluate a vectorized function f on the coordinate meshgrids
+        """Evaluate a vectorized function f on the coordinate meshgrids."""
         for i, L in enumerate(self.coords):
             self.grids[i][...] = f(*L)
 
     def init_ordering(self):
-        # Produce a lexical ordering. Necessary for differentiation and
-        # re-ordering for different lattices.
+        """Produces a lexical ordering. Necessary for differentiation and
+          re-ordering for different lattices."""
         lexical_info = []
 
         for i, L in enumerate(self.grids):
@@ -87,7 +87,7 @@ class Lattice:
             self.d_blocks[i].append(self.d_in.shape[0])
 
     def normalize_coefficients(self, factor=.5):
-        # Kind of unwieldy way to automate multiplying or dividing arrays by factors of 2.
+        """This implements a non-standard normalization for DCT output to get Chebyshev coefficients."""
         for i, C in enumerate(self.coefs):
             for j in range(self.dim):
                 ind = edge_slice(j, self.dim, 0)
@@ -97,7 +97,7 @@ class Lattice:
                     C[ind] *= factor
 
     def apply_chebyshev_weights(self):
-        # Normalize the lattice by applying chebyshev weights.
+        """Normalize the lattice by applying chebyshev weights at each grid point."""
         for i, L in enumerate(self.grids):
             L[...] /= self.lat_size*len(self.grids)/(2**self.dim)
             for j in range(self.dim):
@@ -109,7 +109,7 @@ class Lattice:
                     L[ind] *= .5
 
     def plot_basis(self):
-        # Produce a scatter plot representing the basis.
+        """Produces a scatter plot representing the basis."""
         if (self.dim != 2) and (self.dim != 3): 
             print("This is only supported for 2 and 3 dimensional lattices.")
 
@@ -131,7 +131,7 @@ class Lattice:
 
 
     def to_cartesian(self, fill_val = 0):
-        # Map coefficients onto upsampled Cartesian Grid
+        """Maps coefficients onto the smallest Cartesian Grid for which the full basis is supported."""
         cart_grid = np.full(self.max_degree, float("NaN"))
         for x in self.axis_sort[0]:
             if np.isnan(cart_grid[x[:self.dim]]):
@@ -146,8 +146,8 @@ class Lattice:
         return cart_grid
 
     def load_d_in(self, ax, c_in=None):
-        # Load data from c_in into a vector for differentiation along axis 'ax'
-        # c_in default: self.coefs
+        """Load data from c_in into a vector for differentiation along axis 'ax'
+        c_in default: self.coefs"""
         if c_in is None:
             c_in = self.coefs
 
@@ -155,8 +155,8 @@ class Lattice:
             self.d_in[i] += c_in[x[self.dim + 1]][x[self.dim + 2:]]*x[self.dim]
         
     def save_d_out(self, ax, c_out=None):
-        # Load data from completed derivative calculation to c_out
-        # c_out default: self.coefs
+        """Load data from completed derivative calculation to c_out
+        c_out default: self.coefs"""
         if c_out is None:
             c_out = self.coefs
 
@@ -166,7 +166,13 @@ class Lattice:
             c_out[x[self.dim + 1]][x[self.dim + 2:]] += self.d_out[i]
 
     def get_deriv(self, ax, c_in=None, c_out=None):
-        # Differentiate along axis ax. Uses lexical sort to standardize the process.
+        """Differentiate along axis ax. By default, this uses replaces the function in
+        the coefficient array and replaces it with the derivative. 
+        This can be avoided by specifying c_in to change the source or c_out to change
+        the destination.
+        ax, int: axis along which to differentiate.
+        c_in, list of arrays of the same shape as self.coefs: Used to supply input coefficients
+        c_out, list of arrays of the same shape as self.coefs: Used to store output coefficients"""
         self.d_out[...] = 0
         self.d_in[...] = 0
         self.load_d_in(ax, c_in=c_in)
@@ -189,9 +195,11 @@ class Lattice:
         self.save_d_out(ax, c_out=c_out)
 
     def make_integral_stencil(self):
-        # Make an integral stencil to compute Clenshaw-Curtis quadrature without
-        # transforming the function. (Making the stencil takes O(N log N) time though.)
-        # This overwrites the coefficient information
+        """ Makes an integral stencil to compute Clenshaw-Curtis quadrature without
+         transforming the function. (Making the stencil takes O(N log N) time though.)
+         This overwrites the coefficient information. This is automatically called if
+         get_integral is called before a stencil has been determined, so it is not necessary
+         to call this manually."""
         self.d_out[...] = 0
         for i, x in enumerate(self.axis_sort[0]):
             deg = np.array(x[:self.dim])
@@ -215,17 +223,20 @@ class Lattice:
         self.stencil = [L.copy() for L in self.grids]
 
     def get_integral(self):
+        """Numerically integrate the function stored in self.grids. The first call may be slower than
+        subsequent calls if the stencil has not been predetermined."""
         if not hasattr(self, "stencil"):
             g_list = [L.copy() for L in self.grids]
             self.make_integral_stencil()
             for i in range(len(self.grids)):
                 self.grids[i][...] = g_list[i]
-        return [sum([np.sum(self.stencil[i]*self.grids[i]) for i in range(len(self.grids))])]
+        return sum([np.sum(self.stencil[i]*self.grids[i]) for i in range(len(self.grids))])
 
 class HexLattice(Lattice):
-    # A 4 by 7 Padua-type 2 dimensional lattice. This is extremely
-    # close to the optimal Euclidean degree efficiency for a 2d lattice
-    # without sacrificing easy scalability.
+    """ A 4 by 7 Padua-type 2 dimensional lattice. This is extremely
+     close to the optimal Euclidean degree efficiency for a 2d lattice
+     without sacrificing easy scalability. 
+     n, int: resolution parameter. The lattice has Euclidean degree 4n"""
     def __init__(self, n):
         self.dim = 2
         Lattice.__init__(self, n)
@@ -250,9 +261,9 @@ class HexLattice(Lattice):
             return ind_list, [.5, .5]
 
     def transform(self):
-        # Transform sampled function to Chebyshev coefficients.
-        # There are simpler ways to scale the basis consistently
-        # but then the 'coefs' data wouldn't be exactly Chebyshev coefficients.
+        """ Transform sampled function to Chebyshev coefficients."""
+        #There are simpler ways to scale the basis consistently
+        #but then the 'coefs' data wouldn't be exactly Chebyshev coefficients.
         self.coefs[0][...] = fft.dctn(self.grids[0], type=1, norm="forward")*4
         self.coefs[1][...] = fft.dctn(self.grids[1], type=2, norm="forward")*4
         self.coefs[0][0,:] /= 2
@@ -267,7 +278,7 @@ class HexLattice(Lattice):
             self.coefs[0][ind] = a
 
     def inverse_transform(self):
-        # Transform coefficients to grid values.
+        """Transform coefficients to grid values."""
         for ind in np.ndindex(self.coefs[1].shape):
             a = (self.coefs[0][ind] + self.coefs[1][ind])
             self.coefs[1][ind] = (self.coefs[0][ind] - self.coefs[1][ind])
@@ -282,7 +293,8 @@ class HexLattice(Lattice):
         self.grids[1] = fft.dctn(self.coefs[1], type=3)/4
 
 class PadLattice(Lattice):
-    # An n by n+1 Checkerboard 2 dimensional lattice. Optimal in total degree.
+    """An n by n+1 Checkerboard 2 dimensional lattice. Optimal in total degree.
+    n, int: Resolution parameter. The total degree of the basis is n - 1"""
     def __init__(self, n):
         self.dim = 2
         Lattice.__init__(self, n)
@@ -327,8 +339,9 @@ class PadLattice(Lattice):
         self.grids[1][...] = fft.dct(self.storage[1::2, :-1], axis=1, type=3)
 
 class BCCLattice(Lattice):
-    # A Body-Centered Cubic lattice. The optimal 3d lattice for Euclidean and Total degree
-    # efficiency.
+    """A Body-Centered Cubic lattice. The optimal 3d lattice for Euclidean and Total degree
+    efficiency.
+    n, int: Resolution parameter. The Eucldean degree is sqrt(2)*n"""
     def __init__(self, n):
         self.dim = 3
         Lattice.__init__(self, n)
@@ -440,9 +453,10 @@ class OctLattice(Lattice):
 
 
 class FCCLattice(Lattice):
-    # A Face-Centered Cubic Lattice. Not optimal in Euclidean or total degree but better than
-    # a cartesian lattice, has strictly positive integration weights and better efficiency in
-    # its representation of boundary conditions.
+    """ A Face-Centered Cubic Lattice. Not optimal in Euclidean or total degree but better than
+     a cartesian lattice, has strictly positive integration weights and better efficiency in
+     its representation of boundary conditions.
+     n, int: Resolution parameter. The Euclidean degree is sqrt(3)*n"""
     def __init__(self, n):
         self.dim = 3
         Lattice.__init__(self, n)
