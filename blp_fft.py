@@ -86,15 +86,15 @@ class Lattice:
                 k += 1
             self.d_blocks[i].append(self.d_in.shape[0])
 
-    def normalize_coefficients(self, factor=.5):
+    def normalize_coefficients(self, factor=.5, integ=False):
         """This implements a non-standard normalization for DCT output to get Chebyshev coefficients."""
         for i, C in enumerate(self.coefs):
             for j in range(self.dim):
                 ind = edge_slice(j, self.dim, 0)
                 C[ind] *= factor
-                if (np.abs(self.x[i][j][-1]) + np.abs(self.x[i][j][0])) == 2:
-                    ind = edge_slice(j, self.dim, -1)
-                    C[ind] *= factor
+        #        if (np.abs(self.x[i][j][-1]) + np.abs(self.x[i][j][0])) == 2:
+        #            ind = edge_slice(j, self.dim, -1)
+        #            C[ind] *= factor
 
     def apply_chebyshev_weights(self):
         """Normalize the lattice by applying chebyshev weights at each grid point."""
@@ -185,9 +185,9 @@ class Lattice:
                 self.d_out[blocks[i]] = self.d_in[blocks[i] + 1]
                 continue
             self.d_in[blocks[i]:blocks[i + 1]] *= -np.arange(blocks[i + 1] - blocks[i])
-            self.d_out[blocks[i + 1] - 2] = 2*self.d_in[blocks[i + 1] - 1]
+            self.d_out[blocks[i + 1] - 2] = -2*self.d_in[blocks[i + 1] - 1]
             for j in range(blocks[i + 1] - 3, blocks[i] - 1, -1):
-                self.d_out[j] = 2*self.d_in[j + 1] + self.d_out[j + 2]
+                self.d_out[j] = -2*self.d_in[j + 1] + self.d_out[j + 2]
             self.d_out[blocks[i]] /= 2
 
 #        for i in range(len(self.d_in)):
@@ -203,7 +203,7 @@ class Lattice:
         self.d_out[...] = 0
         for i, x in enumerate(self.axis_sort[0]):
             deg = np.array(x[:self.dim])
-            if np.all(deg % 2 == 0):
+            if np.all((deg % 2) == 0):
                 v = np.prod(2/(1 - deg**2))
                 self.d_out[i] = v*x[self.dim]
 
@@ -311,18 +311,23 @@ class PadLattice(Lattice):
         if i == 0:
             return [ind], [1]
         if i == 1:
-            if (self.res[0] - ind[0] + ind[1]) > (self.res[1] - ind[1] + ind[0]):
-                return [(ind[0], self.res[1] - 1 - ind[1])], [1]
-            return [(self.res[0] - 1 - ind[0], ind[1])], [1]
+            ind_2 = np.array([ind[0] + self.res[0]//2, ind[1]])
+            if np.sum(ind_2) > self.n - 1:
+                ind_2[0] = self.res[0] - 1 - ind_2[0]
+                ind_2[1] = self.res[1] - 1 - ind_2[1]
+            return [ind_2], [1]
 
     def transform(self):
         self.storage[1::2, -1] = 0
         self.storage[::2] = fft.dct(self.grids[0], axis=1, type=1)
         self.storage[1::2, :-1] = fft.dct(self.grids[1], axis=1, type=2)
         self.storage[:, 0] /= 2
+        #self.storage[:,-1] /= 2
         self.storage[...] = fft.dct(self.storage, axis=0, type=1)/(2*self.lat_size)
         self.storage[0, :] /= 2
-        self.storage[-1, :] /= 2
+        #self.storage[-1] /= 2
+        #self.storage[self.res[0]//2] /= 2
+        #self.storage[-1] /= 2
         self.coefs[0][...] = self.storage[:self.res[0]//2]
         self.coefs[1][...] = self.storage[self.res[0]//2:, :-1]
 
@@ -330,13 +335,21 @@ class PadLattice(Lattice):
         self.storage[self.res[0]//2:, -1] = 0
         self.storage[self.res[0]//2:, :-1] = self.coefs[1]
         self.storage[:self.res[0]//2] = self.coefs[0]
+        #self.storage[self.res[0]//2] *= 2
+        #self.storage[-1] *= 2
         self.storage[0, :] *= 2
-        self.storage[-1, :] *= 2
+        #self.storage[-1, 1:] *= 4
         self.storage[...] = fft.dct(self.storage, axis=0, type=1)/4
         self.storage[:, 0] *= 2
         self.storage[:,-1] *= 2
         self.grids[0][...] = fft.dct(self.storage[::2], axis=1, type=1)
         self.grids[1][...] = fft.dct(self.storage[1::2, :-1], axis=1, type=3)
+
+    def adjoint_transform(self):
+        self.normalize_coefficients(factor=.5)
+        self.coefs[1][0] *= 2
+        self.inverse_transform()
+        self.apply_chebyshev_weights()
 
 class BCCLattice(Lattice):
     """A Body-Centered Cubic lattice. The optimal 3d lattice for Euclidean and Total degree
@@ -522,12 +535,12 @@ class FCCLattice(Lattice):
             self.coefs[i][0,:,:] /= 2
             self.coefs[i][:,0,:] /= 2
             self.coefs[i][:,:,0] /= 2
-            if (i == 0) or (i == 1):
-                self.coefs[i][:,:,-1] /= 2
-            if (i == 0) or (i == 2):
-                self.coefs[i][:,-1,:] /= 2
-            if (i == 0) or (i == 3):
-                self.coefs[i][-1,:,:] /= 2
+            #if (i == 0) or (i == 1):
+            #    self.coefs[i][:,:,-1] /= 2
+            #if (i == 0) or (i == 2):
+            #    self.coefs[i][:,-1,:] /= 2
+            #if (i == 0) or (i == 3):
+            #    self.coefs[i][-1,:,:] /= 2
 
         i_vec = [0, 2, 0, 1]
         j_vec = [1, 3, 2, 3]

@@ -45,3 +45,23 @@ def test_integral(lat, f, true_int):
     lat.eval_func(f)
     return np.abs(true_int - lat.get_integral())
 
+def test_int_accuracy(lat):
+    for i in range(len(lat.grids)):
+        for ind in np.ndindex(lat.grids[i].shape):
+            t_d, fac = lat.get_degree(i, ind)
+            d = tuple([k for k in t_d[0]])
+            t_d = np.array(t_d)
+            t_d = (2 - 2*(t_d%2))/(1 - (2*(t_d//2))**2)
+            fac = np.array(fac)
+            t_d = np.prod(t_d, axis=1)
+            I = np.sum(fac*t_d)
+            
+            def T(*gs):
+                val = np.ones(gs[0].shape)
+                for j in range(len(d)):
+                    val *= np.sign(fac[0])*np.cos(d[j]*np.arccos(gs[j]))
+                return val
+
+            lat.eval_func(T)
+            print(d, I, lat.get_integral())
+
