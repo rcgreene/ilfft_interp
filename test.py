@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import blp_fft as bf
+import ilfft_interp as bf
 import numpy.linalg as lin
 import numpy.random as rand
 
