@@ -336,7 +336,7 @@ class PadLattice(Lattice):
         self.storage[self.res[0]//2:, :-1] = self.coefs[1]
         self.storage[:self.res[0]//2] = self.coefs[0]
         #self.storage[self.res[0]//2] *= 2
-        #self.storage[-1] *= 2
+        self.storage[-1] *= 2
         self.storage[0, :] *= 2
         #self.storage[-1, 1:] *= 4
         self.storage[...] = fft.dct(self.storage, axis=0, type=1)/4
@@ -564,8 +564,6 @@ class OctLattice(Lattice):
         self.M_list.append(M.copy())
         M = np.array([[1, -1],[1, 1]])
         self.M_list.append(M.copy())
-        for a in self.M_list:
-            print(lin.cond(a))
         self.M_invs = [lin.inv(A) for A in self.M_list]
 
     def test_aliasing(self, ind):
